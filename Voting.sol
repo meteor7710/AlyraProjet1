@@ -20,6 +20,7 @@ contract Admin is Ownable{
     struct Vote{
         WorkflowStatus voteStatus;
         mapping (address => Voter) voter;
+        Proposal[] proposals;
     }
 
     Vote newVote;
@@ -45,6 +46,11 @@ contract Admin is Ownable{
 
     //Workflow status change event
     event WorkflowStatusChange(WorkflowStatus previousStatus, WorkflowStatus newStatus);
+
+    //Proposal registration event
+    event ProposalRegistered(uint proposalId);
+
+
 
     //Voter mapping
     //mapping (address => Voter) private _voter;
@@ -75,6 +81,27 @@ contract Admin is Ownable{
         WorkflowStatus previousStatus = newVote.voteStatus;
         newVote.voteStatus = WorkflowStatus(uint(newVote.voteStatus) + 1);
         emit WorkflowStatusChange (previousStatus, newVote.voteStatus);
+    }
+
+    //Validate voter
+    modifier voterAllowed(){
+        require ( newVote.voter[msg.sender].isRegistered,"You are not registered as voter");
+        _;
+    }
+
+    // Allow proposal submission only in correct state
+    modifier proposalAllowed()  {
+        require ( newVote.voteStatus == WorkflowStatus.ProposalsRegistrationStarted,"Proposals submission is not started or already closed");
+        _;
+   }
+
+    //Register a proposal
+    function registerProposal (string memory _decription  ) public proposalAllowed voterAllowed{
+        uint proposalId = newVote.proposals.length;
+        Proposal memory newProposal = Proposal (_decription,0);
+        newVote.proposals.push(newProposal);
+        emit ProposalRegistered(proposalId);
+
     }
 
 

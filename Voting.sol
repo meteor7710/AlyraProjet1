@@ -19,8 +19,10 @@ contract Admin is Ownable{
     //Vote Structure 
     struct Vote{
         WorkflowStatus voteStatus;
-        mapping (address => Voter) voter;
+        mapping (address => Voter) voters;
         Proposal[] proposals;
+        uint winnerVoteCount;
+        uint[] winnerProposals;
     }
 
     Vote newVote;
@@ -50,23 +52,17 @@ contract Admin is Ownable{
     //Proposal registration event
     event ProposalRegistered(uint proposalId);
 
-
-
-    //Voter mapping
-    //mapping (address => Voter) private _voter;
-
-
     //Add new Voter
     function registerVoter (address _address) public onlyOwner{
-        require(!newVote.voter[_address].isRegistered, "This voter is already registered !");
-        newVote.voter[_address].isRegistered=true;
+        require(!newVote.voters[_address].isRegistered, "This voter is already registered !");
+        newVote.voters[_address].isRegistered=true;
         emit VoterRegistered (_address);
     }
 
     //Remove Voter
     function removeVoter (address _address) public onlyOwner{
-        require(newVote.voter[_address].isRegistered, "This voter is not registered !");
-        delete newVote.voter[_address];
+        require(newVote.voters[_address].isRegistered, "This voter is not registered !");
+        delete newVote.voters[_address];
         emit VoterRemoved (_address);
     }
 
@@ -85,29 +81,99 @@ contract Admin is Ownable{
 
     //Validate voter
     modifier voterAllowed(){
-        require ( newVote.voter[msg.sender].isRegistered,"You are not registered as voter");
+        require ( newVote.voters[msg.sender].isRegistered,"You are not registered as voter");
         _;
     }
 
-    // Allow proposal submission only in correct state
+    // Allow proposal registration only in correct state
     modifier proposalAllowed()  {
-        require ( newVote.voteStatus == WorkflowStatus.ProposalsRegistrationStarted,"Proposals submission is not started or already closed");
+        require ( newVote.voteStatus == WorkflowStatus.ProposalsRegistrationStarted,"Proposals registration is not started or already closed");
         _;
-   }
+    }
 
     //Register a proposal
-    function registerProposal (string memory _decription  ) public proposalAllowed voterAllowed{
-        uint proposalId = newVote.proposals.length;
+    function registerProposal (string memory _decription) public proposalAllowed voterAllowed{
+        uint proposalId = newVote.proposals.length + 1;
         Proposal memory newProposal = Proposal (_decription,0);
         newVote.proposals.push(newProposal);
         emit ProposalRegistered(proposalId);
 
     }
 
+    //Allow vote only in correct state
+    modifier voteOpened()  {
+        require ( newVote.voteStatus == WorkflowStatus.VotingSessionStarted,"Vote submission is not started or already closed");
+        _;
+    }
+
+    //Validate voter has not already voted
+    modifier canVote()  {
+        require ( !newVote.voters[msg.sender].hasVoted ,"You have already voted");
+        _;
+    }
+
+    //Validate voter has not already voted
+    modifier hasVoted()  {
+        require ( newVote.voters[msg.sender].hasVoted ,"You have not voted");
+        _;
+    }
 
 
+   //Submit vote
+    function submitVote (uint _proposalId) public voteOpened voterAllowed canVote{
+        require ( _proposalId != 0 ,"Your proposal does not exist");
+        require ( _proposalId <= (newVote.proposals.length + 1) ,"Your proposal does not exist");
+        newVote.proposals[(_proposalId-1)].voteCount++;
+        newVote.voters[msg.sender].hasVoted =  true;
+        newVote.voters[msg.sender].votedProposalId =  _proposalId;
+    }
+
+    //Remove vote
+    function removeVote() public voteOpened voterAllowed hasVoted{
+        uint previousVote = newVote.voters[msg.sender].votedProposalId;
+        newVote.proposals[(previousVote-1)].voteCount--;
+        newVote.voters[msg.sender].hasVoted =  false;
+        newVote.voters[msg.sender].votedProposalId = 0 ;
+    }
 
 
-     
+    // Allow vote computation only in VotingSessionEnded state
+    modifier voteClosed()  {
+        require ( newVote.voteStatus == WorkflowStatus.VotingSessionEnded,"Vote are not closed or already released");
+        _;
+    }
 
+
+    //Compute winning proposals
+    function computeWinner() public voteClosed onlyOwner{
+        uint i;
+        for (i=0;i< newVote.proposals.length;i++){
+            if (newVote.proposals[i].voteCount > newVote.winnerVoteCount){
+                newVote.winnerVoteCount = newVote.proposals[i].voteCount;
+                if (newVote.winnerProposals.length>0){
+                    //we clean winnerProposals
+                    while (newVote.winnerProposals.length!=0){
+                        newVote.winnerProposals.pop;
+                    }
+                }
+                newVote.winnerProposals.push(i+1);
+            }
+            else if (newVote.proposals[i].voteCount == newVote.winnerVoteCount){
+                newVote.winnerProposals.push(i+1);
+             }
+        }
+    }
+
+
+    //Allow vote computation only in VotingSessionEnded state
+    modifier voteTallied()  {
+        require ( newVote.voteStatus == WorkflowStatus.VotesTallied,"Vote are not tallied");
+        _;
+    }
+
+    //returns winning proposals
+    function getWinner() public view voteTallied returns (uint[] memory winnerProposals_, uint winnerVoteCount_) {
+        winnerProposals_= newVote.winnerProposals;
+        winnerVoteCount_=newVote.winnerVoteCount;
+    }
 }

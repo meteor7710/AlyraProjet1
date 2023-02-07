@@ -151,10 +151,7 @@ contract Admin is Ownable{
             if (newVote.proposals[i].voteCount > newVote.winnerVoteCount){
                 newVote.winnerVoteCount = newVote.proposals[i].voteCount;
                 if (newVote.winnerProposals.length>0){
-                    //we clean winnerProposals
-                    while (newVote.winnerProposals.length!=0){
-                        newVote.winnerProposals.pop;
-                    }
+                    delete newVote.winnerProposals;
                 }
                 newVote.winnerProposals.push(i+1);
             }

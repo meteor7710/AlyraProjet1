@@ -26,6 +26,7 @@ contract Admin is Ownable{
     }
 
     Vote newVote;
+    uint voteSession = 1;
 
     //Voter Structure
     struct Voter {
@@ -52,15 +53,24 @@ contract Admin is Ownable{
     //Proposal registration event
     event ProposalRegistered(uint proposalId);
 
+    //Vote results event
+    event VotesResults(uint[] winnerProposals,uint winnerVoteCount, uint voteSession);
+
+    //Can add or remove voter
+    modifier voterModificationAllowed(){
+        require ( (newVote.voteStatus == WorkflowStatus.RegisteringVoters),"You can not add or remove voter at this step");
+        _;
+    }
+
     //Add new Voter
-    function registerVoter (address _address) public onlyOwner{
+    function registerVoter (address _address) public voterModificationAllowed onlyOwner{
         require(!newVote.voters[_address].isRegistered, "This voter is already registered !");
         newVote.voters[_address].isRegistered=true;
         emit VoterRegistered (_address);
     }
 
     //Remove Voter
-    function removeVoter (address _address) public onlyOwner{
+    function removeVoter (address _address) public voterModificationAllowed onlyOwner{
         require(newVote.voters[_address].isRegistered, "This voter is not registered !");
         delete newVote.voters[_address];
         emit VoterRemoved (_address);
@@ -159,6 +169,7 @@ contract Admin is Ownable{
                 newVote.winnerProposals.push(i+1);
              }
         }
+        emit VotesResults(newVote.winnerProposals,newVote.winnerVoteCount,voteSession);
     }
 
 
@@ -169,8 +180,16 @@ contract Admin is Ownable{
     }
 
     //returns winning proposals
-    function getWinner() public view voteTallied returns (uint[] memory winnerProposals_, uint winnerVoteCount_) {
+    function getWinner() public view  voteTallied returns (uint[] memory winnerProposals_, uint winnerVoteCount_) {
         winnerProposals_= newVote.winnerProposals;
         winnerVoteCount_=newVote.winnerVoteCount;
     }
+
+    //Start new vote or reset current vote
+    function startNewVote() public  onlyOwner {
+        delete newVote;
+        voteSession++;
+    }
+
+
 }

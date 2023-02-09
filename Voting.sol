@@ -5,7 +5,7 @@ pragma solidity 0.8.18;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-contract Admin is Ownable{
+contract Voting is Ownable{
 
     //States variables definitions
     Vote[] voteHistory;

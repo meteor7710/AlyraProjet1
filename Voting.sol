@@ -1,19 +1,17 @@
 //SPDX-License-Identifier: MIT
 pragma solidity 0.8.18;
 
-/*TODO:  add array to vote
-
-*/
-
-//Open Zepplin Ownable import
+//OpenZeppelin  import
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract Admin is Ownable{
 
     //States variables definitions
-    Vote[] newVote;
+    //Vote[] newVote;
+    Vote[] voteHistory;
     uint8 voteSession = 1;
+    Vote currentVote;
 
     //Enumartions definitions
     enum WorkflowStatus {
@@ -72,7 +70,7 @@ contract Admin is Ownable{
     }
 
     modifier voteStatusValidation (uint8 _status) { //Validate the vote status is equal to a value (uint) of WorkflowStatus enum
-        require ( newVote[voteSession-1].voteStatus == WorkflowStatus(_status),string.concat("Vote status is: ", status[uint8(newVote[voteSession-1].voteStatus)], ", not: ", status[_status]));
+        require ( currentVote.voteStatus == WorkflowStatus(_status),string.concat("Vote status is: ", status[uint8(currentVote.voteStatus)], ", not: ", status[_status]));
         _;
     }
 
@@ -87,15 +85,14 @@ contract Admin is Ownable{
     }
 
     //Add new Voter
-    //function registerVoter (address _address) public voterModificationAllowed onlyOwner{
-    function registerVoter (address _address) external voteStatusValidation(0) onlyOwner{
+    function registerVoter (address _address) external onlyOwner voteStatusValidation(0) {
         require(!voters[voteSession][_address].isRegistered, "This voter is already registered !");
         voters[voteSession][_address].isRegistered=true;
         emit VoterRegistered (_address);
     }
 
     //Remove Voter
-    function removeVoter (address _address) external voteStatusValidation(0) onlyOwner{
+    function removeVoter (address _address) external onlyOwner voteStatusValidation(0) {
         require(voters[voteSession][_address].isRegistered, "This voter is not registered !");
         delete voters[voteSession][_address];
         emit VoterRemoved (_address);
@@ -103,7 +100,7 @@ contract Admin is Ownable{
 
     //Get workflow status
     function getWorkflowStatus () external view onlyOwner returns (string memory) {
-        return status[uint(newVote[voteSession-1].voteStatus)];
+        return status[uint(currentVote.voteStatus)];
     }
 
     //Get Vote Session status
@@ -113,72 +110,80 @@ contract Admin is Ownable{
 
     //Change vote status to next step
     function changeWorkflowStatus () external onlyOwner{
-        require((newVote[voteSession-1].voteStatus != WorkflowStatus.VotesTallied), "This vote is already finished !");
-        WorkflowStatus previousStatus = newVote[voteSession-1].voteStatus;
-        newVote[voteSession-1].voteStatus = WorkflowStatus(uint(newVote[voteSession-1].voteStatus) + 1);
-        emit WorkflowStatusChange (previousStatus, newVote[voteSession-1].voteStatus);
+        require((currentVote.voteStatus != WorkflowStatus.VotesTallied), "This vote is already finished !");
+        WorkflowStatus previousStatus = currentVote.voteStatus;
+        currentVote.voteStatus = WorkflowStatus(uint(currentVote.voteStatus) + 1);
+        emit WorkflowStatusChange (previousStatus, currentVote.voteStatus);
     }
 
     //Register a proposal
-    function registerProposal (string memory _decription) external voteStatusValidation(1) voterAllowed{
-        uint proposalId = newVote[voteSession-1].proposals.length + 1;
+    function registerProposal (string memory _decription) external voterAllowed voteStatusValidation(1) {
+        uint proposalId = currentVote.proposals.length + 1;
         Proposal memory newProposal = Proposal (_decription,0);
-        newVote[voteSession-1].proposals.push(newProposal);
+        currentVote.proposals.push(newProposal);
         emit ProposalRegistered(proposalId);
     }
 
    //Submit vote
-    function submitVote (uint8 _proposalId) external voteStatusValidation(3) voterAllowed canVote{
+    function submitVote (uint8 _proposalId) external voterAllowed canVote voteStatusValidation(3)  {
         require ( _proposalId != 0 ,"Your proposal does not exist");
-        require ( _proposalId <= (newVote[voteSession-1].proposals.length + 1) ,"Your proposal does not exist");
-        newVote[voteSession-1].proposals[(_proposalId-1)].voteCount++;
+        require ( _proposalId <= (currentVote.proposals.length + 1) ,"Your proposal does not exist");
+        currentVote.proposals[(_proposalId-1)].voteCount++;
         voters[voteSession][msg.sender].hasVoted =  true;
         voters[voteSession][msg.sender].votedProposalId =  _proposalId;
     }
 
     //Remove vote
-    function removeVote() external voteStatusValidation(3) voterAllowed hasVoted{
+    function removeVote() external voterAllowed hasVoted voteStatusValidation(3) {
         uint previousVote = voters[voteSession][msg.sender].votedProposalId;
-        newVote[voteSession-1].proposals[(previousVote-1)].voteCount--;
+        currentVote.proposals[(previousVote-1)].voteCount--;
         voters[voteSession][msg.sender].hasVoted =  false;
         voters[voteSession][msg.sender].votedProposalId = 0 ;
     }
 
     //Compute winning proposals
-    function computeWinner() external voteStatusValidation(4) onlyOwner{
+    function computeWinner() external onlyOwner voteStatusValidation(4) {
         uint8 i;
-        for (i=0;i< newVote[voteSession-1].proposals.length;i++){
-            if (newVote[voteSession-1].proposals[i].voteCount > newVote[voteSession-1].winnerVoteCount){
-                newVote[voteSession-1].winnerVoteCount = newVote[voteSession-1].proposals[i].voteCount;
-                if (newVote[voteSession-1].winnerProposals.length>0){
-                    delete newVote[voteSession-1].winnerProposals;
+        for (i=0;i< currentVote.proposals.length;i++){
+            if (currentVote.proposals[i].voteCount > currentVote.winnerVoteCount){
+                currentVote.winnerVoteCount = currentVote.proposals[i].voteCount;
+                if (currentVote.winnerProposals.length>0){
+                    delete currentVote.winnerProposals;
                 }
-                newVote[voteSession-1].winnerProposals.push(i+1);
+                currentVote.winnerProposals.push(i+1);
             }
-            else if (newVote[voteSession-1].proposals[i].voteCount == newVote[voteSession-1].winnerVoteCount){
-                newVote[voteSession-1].winnerProposals.push(i+1);
+            else if (currentVote.proposals[i].voteCount == currentVote.winnerVoteCount){
+                currentVote.winnerProposals.push(i+1);
              }
         }
-        emit VotesResults(newVote[voteSession-1].winnerProposals,newVote[voteSession-1].winnerVoteCount,voteSession);
+        emit VotesResults(currentVote.winnerProposals,currentVote.winnerVoteCount,voteSession);
     }
 
     //returns winning proposals
-    function getWinner(uint8 _voteSession) external view  voteStatusValidation(5) returns (uint8[] memory winnerProposals_,uint winnerVoteCount_) {
-        if (_voteSession ==0) {_voteSession = voteSession-1;} //if no vote is entered we use current session
-        winnerProposals_= newVote[_voteSession-1].winnerProposals;
-        winnerVoteCount_= newVote[_voteSession-1].winnerVoteCount;
+    function getWinner(uint8 _voteSession) external view returns (uint8[] memory winnerProposals_,uint winnerVoteCount_) {
+        if (_voteSession == 0 || _voteSession == voteSession ) {  //if no vote is entered we use current session
+            require ( currentVote.voteStatus == WorkflowStatus(5),string.concat("Vote status is: ", status[uint8(currentVote.voteStatus)], ", not: ", status[5]));
+            winnerProposals_= currentVote.winnerProposals;
+            winnerVoteCount_= currentVote.winnerVoteCount;
+        }
+        else{
+            require ( _voteSession <= voteHistory.length ,"Your Vote Session does not exists");
+            require ( voteHistory[_voteSession-1].voteStatus == WorkflowStatus(5),string.concat("Vote status is: ", status[uint8(voteHistory[_voteSession-1].voteStatus)], ", not: ", status[5]));
+            winnerProposals_= voteHistory[_voteSession-1].winnerProposals;
+            winnerVoteCount_= voteHistory[_voteSession-1].winnerVoteCount;
+        }
     }
 
     //Start new vote or reset current vote
     function startnewVote() public  onlyOwner {
-        //delete newVote[voteSession-1];
+        voteHistory.push(currentVote);
         voteSession++;
+        delete currentVote;
     }
 
     //Start new vote or reset current vote
-    function getVoteFromAddr(uint8 _voteSession,address _voterAddr) external view  voteStatusValidation(5) voterAllowed returns (uint8 proposalId_) {
+    function getVoteFromAddr(uint8 _voteSession,address _voterAddr) external view  voterAllowed voteStatusValidation(5)  returns (uint8 proposalId_) {
         require ( voters[_voteSession][_voterAddr].isRegistered,"The address is not a voter");
-        require ( voters[_voteSession][_voterAddr].hasVoted,"The address has not voted");
         proposalId_= voters[_voteSession][_voterAddr].votedProposalId;
     }
 }

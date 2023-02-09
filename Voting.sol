@@ -12,7 +12,7 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract Admin is Ownable{
 
     //States variables definitions
-    Vote newVote;
+    Vote[] newVote;
     uint8 voteSession = 1;
 
     //Enumartions definitions
@@ -72,7 +72,7 @@ contract Admin is Ownable{
     }
 
     modifier voteStatusValidation (uint8 _status) { //Validate the vote status is equal to a value (uint) of WorkflowStatus enum
-        require ( newVote.voteStatus == WorkflowStatus(_status),string.concat("Vote status is: ", status[uint8(newVote.voteStatus)], ", not: ", status[_status]));
+        require ( newVote[voteSession-1].voteStatus == WorkflowStatus(_status),string.concat("Vote status is: ", status[uint8(newVote[voteSession-1].voteStatus)], ", not: ", status[_status]));
         _;
     }
 
@@ -103,7 +103,7 @@ contract Admin is Ownable{
 
     //Get workflow status
     function getWorkflowStatus () external view onlyOwner returns (string memory) {
-        return status[uint(newVote.voteStatus)];
+        return status[uint(newVote[voteSession-1].voteStatus)];
     }
 
     //Get Vote Session status
@@ -113,25 +113,25 @@ contract Admin is Ownable{
 
     //Change vote status to next step
     function changeWorkflowStatus () external onlyOwner{
-        require((newVote.voteStatus != WorkflowStatus.VotesTallied), "This vote is already finished !");
-        WorkflowStatus previousStatus = newVote.voteStatus;
-        newVote.voteStatus = WorkflowStatus(uint(newVote.voteStatus) + 1);
-        emit WorkflowStatusChange (previousStatus, newVote.voteStatus);
+        require((newVote[voteSession-1].voteStatus != WorkflowStatus.VotesTallied), "This vote is already finished !");
+        WorkflowStatus previousStatus = newVote[voteSession-1].voteStatus;
+        newVote[voteSession-1].voteStatus = WorkflowStatus(uint(newVote[voteSession-1].voteStatus) + 1);
+        emit WorkflowStatusChange (previousStatus, newVote[voteSession-1].voteStatus);
     }
 
     //Register a proposal
     function registerProposal (string memory _decription) external voteStatusValidation(1) voterAllowed{
-        uint proposalId = newVote.proposals.length + 1;
+        uint proposalId = newVote[voteSession-1].proposals.length + 1;
         Proposal memory newProposal = Proposal (_decription,0);
-        newVote.proposals.push(newProposal);
+        newVote[voteSession-1].proposals.push(newProposal);
         emit ProposalRegistered(proposalId);
     }
 
    //Submit vote
     function submitVote (uint8 _proposalId) external voteStatusValidation(3) voterAllowed canVote{
         require ( _proposalId != 0 ,"Your proposal does not exist");
-        require ( _proposalId <= (newVote.proposals.length + 1) ,"Your proposal does not exist");
-        newVote.proposals[(_proposalId-1)].voteCount++;
+        require ( _proposalId <= (newVote[voteSession-1].proposals.length + 1) ,"Your proposal does not exist");
+        newVote[voteSession-1].proposals[(_proposalId-1)].voteCount++;
         voters[voteSession][msg.sender].hasVoted =  true;
         voters[voteSession][msg.sender].votedProposalId =  _proposalId;
     }
@@ -139,7 +139,7 @@ contract Admin is Ownable{
     //Remove vote
     function removeVote() external voteStatusValidation(3) voterAllowed hasVoted{
         uint previousVote = voters[voteSession][msg.sender].votedProposalId;
-        newVote.proposals[(previousVote-1)].voteCount--;
+        newVote[voteSession-1].proposals[(previousVote-1)].voteCount--;
         voters[voteSession][msg.sender].hasVoted =  false;
         voters[voteSession][msg.sender].votedProposalId = 0 ;
     }
@@ -147,30 +147,31 @@ contract Admin is Ownable{
     //Compute winning proposals
     function computeWinner() external voteStatusValidation(4) onlyOwner{
         uint8 i;
-        for (i=0;i< newVote.proposals.length;i++){
-            if (newVote.proposals[i].voteCount > newVote.winnerVoteCount){
-                newVote.winnerVoteCount = newVote.proposals[i].voteCount;
-                if (newVote.winnerProposals.length>0){
-                    delete newVote.winnerProposals;
+        for (i=0;i< newVote[voteSession-1].proposals.length;i++){
+            if (newVote[voteSession-1].proposals[i].voteCount > newVote[voteSession-1].winnerVoteCount){
+                newVote[voteSession-1].winnerVoteCount = newVote[voteSession-1].proposals[i].voteCount;
+                if (newVote[voteSession-1].winnerProposals.length>0){
+                    delete newVote[voteSession-1].winnerProposals;
                 }
-                newVote.winnerProposals.push(i+1);
+                newVote[voteSession-1].winnerProposals.push(i+1);
             }
-            else if (newVote.proposals[i].voteCount == newVote.winnerVoteCount){
-                newVote.winnerProposals.push(i+1);
+            else if (newVote[voteSession-1].proposals[i].voteCount == newVote[voteSession-1].winnerVoteCount){
+                newVote[voteSession-1].winnerProposals.push(i+1);
              }
         }
-        emit VotesResults(newVote.winnerProposals,newVote.winnerVoteCount,voteSession);
+        emit VotesResults(newVote[voteSession-1].winnerProposals,newVote[voteSession-1].winnerVoteCount,voteSession);
     }
 
     //returns winning proposals
-    function getWinner() external view  voteStatusValidation(5) returns (uint8[] memory winnerProposals_,uint winnerVoteCount_) {
-        winnerProposals_= newVote.winnerProposals;
-        winnerVoteCount_= newVote.winnerVoteCount;
+    function getWinner(uint8 _voteSession) external view  voteStatusValidation(5) returns (uint8[] memory winnerProposals_,uint winnerVoteCount_) {
+        if (_voteSession ==0) {_voteSession = voteSession-1;} //if no vote is entered we use current session
+        winnerProposals_= newVote[_voteSession-1].winnerProposals;
+        winnerVoteCount_= newVote[_voteSession-1].winnerVoteCount;
     }
 
     //Start new vote or reset current vote
-    function startNewVote() public  onlyOwner {
-        delete newVote;
+    function startnewVote() public  onlyOwner {
+        //delete newVote[voteSession-1];
         voteSession++;
     }
 

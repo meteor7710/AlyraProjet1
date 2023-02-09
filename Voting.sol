@@ -8,9 +8,8 @@ import "@openzeppelin/contracts/utils/Strings.sol";
 contract Admin is Ownable{
 
     //States variables definitions
-    //Vote[] newVote;
     Vote[] voteHistory;
-    uint8 voteSession = 1;
+    uint8 voteSession;
     Vote currentVote;
 
     //Enumartions definitions
@@ -46,6 +45,19 @@ contract Admin is Ownable{
         uint voteCount;
     }
 
+    constructor (){
+        //Set default value to status mapping
+        status[0] = "RegisteringVoters";
+        status[1] = "ProposalsRegistrationStarted";
+        status[2] = "ProposalsRegistrationEnded";
+        status[3] = "VotingSessionStarted";
+        status[4] = "VotingSessionEnded";
+        status[5] = "VotesTallied";
+
+        //Set default Session number to 1
+        voteSession = 1;
+    }
+
     //Events definitions
     event VoterRegistered(address voterAddress); //Voter registration event
     event VoterRemoved(address voterAddress); //Voter removal event
@@ -74,15 +86,6 @@ contract Admin is Ownable{
         _;
     }
 
-    constructor (){
-        //Set default value to status mapping
-        status[0]="RegisteringVoters";
-        status[1]="ProposalsRegistrationStarted";
-        status[2]="ProposalsRegistrationEnded";
-        status[3]="VotingSessionStarted";
-        status[4]="VotingSessionEnded";
-        status[5]="VotesTallied";
-    }
 
     //Add new Voter
     function registerVoter (address _address) external onlyOwner voteStatusValidation(0) {
